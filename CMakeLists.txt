@@ -85,7 +85,7 @@ set(
   $<${is-x64}:V8_TARGET_ARCH_X64>
   $<${is-ia32}:DISABLE_UNTRUSTED_CODE_MITIGATIONS> # lest we get FATAL("Poisoning is not supported on ia32.");
   $<${is-win}:NOMINMAX>
-  $<$<AND:${is-win},${is-x64}>:V8_OS_WIN_X64>
+  # $<$<AND:${is-win},${is-x64}>:V8_OS_WIN_X64> # Should not be required.
   $<$<BOOL:${V8_ENABLE_CONCURRENT_MARKING}>:V8_CONCURRENT_MARKING>
   $<${is-win}:V8_OS_WIN32>
 )
@@ -108,6 +108,8 @@ set(enable-exceptions
   $<$<CXX_COMPILER_ID:Clang>:-fexceptions>
   $<$<CXX_COMPILER_ID:GNU>:-fexceptions>
 )
+
+set(has_control_flow_integrity ${is-arm64})
 
 #
 # d8
@@ -186,7 +188,7 @@ file(GLOB ast-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/as
 file(GLOB builtin-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/builtins/*.cc)
 file(GLOB codegen-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/codegen/*.cc)
 file(GLOB debug-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/debug/*.cc)
-file(GLOB deoptimizer-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/deoptimizer/*.cc)
+#file(GLOB deoptimizer-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/deoptimizer/*.cc)
 file(GLOB diagnostic-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/diagnostics/*.cc)
 file(GLOB execution-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/execution/*.cc)
 file(GLOB extensions-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/extensions/*.cc)
@@ -211,6 +213,13 @@ file(GLOB heap-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS
   v8/src/heap/*.cc
   v8/src/heap/base/*.cc
   v8/src/heap/third-party/*.cc
+)
+
+set(deoptimizer-sources
+  "v8/src/deoptimizer/deoptimizer.cc"
+  "v8/src/deoptimizer/deoptimize-reason.cc"
+  $<${has_control_flow_integrity}:"v8/src/deoptimizer/deoptimizer-cfi-builtins.cc">
+  $<${has_control_flow_integrity}:"v8/src/deoptimizer/deoptimizer-cfi-empty.cc">
 )
 
 list(REMOVE_ITEM builtin-sources
@@ -338,6 +347,12 @@ if (WIN32)
   endif()
 endif()
 
+#if using preompiled headers, _WIN32_WINNT needs to be set globally or compilation fails.
+set(v8_define_winnt)
+if (WIN32)
+set(v8_define_winnt -DUNICODE -D_WIN32_WINNT=${windows-version})
+endif()
+
 set_property(SOURCE v8/src/diagnostics/unwinding-info-win64.cc
   APPEND PROPERTY
     COMPILE_DEFINITIONS
@@ -345,7 +360,7 @@ set_property(SOURCE v8/src/diagnostics/unwinding-info-win64.cc
       _WIN32_WINNT=${windows-version}
 )
 
-target_compile_definitions(v8_base_without_compiler PRIVATE ${v8_defines} $<${is-msvc}:_HAS_EXCEPTIONS=0>)
+target_compile_definitions(v8_base_without_compiler PRIVATE ${v8_defines} ${v8_define_winnt} $<${is-msvc}:_HAS_EXCEPTIONS=0>)
 target_compile_options(v8_base_without_compiler PRIVATE ${disable-exceptions})
 
 target_include_directories(v8_base_without_compiler
@@ -907,15 +922,19 @@ if(${USE_PRECOMPILED_HEADERS})
   # cant include everything in base
   set(H_BASE 
     "cmake/precomp_stl.h"
+    "v8/src/base/compiler-specific.h"
+    "v8/src/base/memory.h"
+    "v8/src/base/build_config.h"
     "v8/src/base/atomicops.h"
     "v8/src/base/base-export.h"
     "v8/src/base/bits.h"
     "v8/src/base/bounds.h"
-    "v8/src/base/build_config.h"
     "v8/src/base/bounded-page-allocator.h"
     "v8/src/base/file-utils.h"
     "v8/src/base/flags.h"
     "v8/src/base/functional.h"
+    "v8/src/base/lazy-instance.h"
+    "v8/src/base/v8-fallthrough.h"
   )
   file(GLOB H_API "v8/src/api/*.h")
   file(GLOB H_BUILTINS "v8/src/builtins/*.h")
@@ -924,29 +943,41 @@ if(${USE_PRECOMPILED_HEADERS})
   file(GLOB H_FLAGS "v8/src/flags/*.h")
   file(GLOB H_HEAP "v8/src/heap/*.h")
   file(GLOB H_LOGGING "v8/src/logging/*.h")
-  file(GLOB H_OBJECTS "v8/src/objects/*.h")
   file(GLOB H_REGEXP "v8/src/regexp/*.h")
   file(GLOB H_RUNTIME "v8/src/runtime/*.h")
   file(GLOB H_STRINGS "v8/src/strings/*.h")
   file(GLOB H_UTILS "v8/src/utils/*.h")
   file(GLOB H_WASM "v8/src/wasm/*.h")
 
+  # Can't GLOB this one..
+  set(H_OBJECTS 
+    "v8/src/objects/compilation-cache-inl.h"
+    "v8/src/objects/elements.h"
+    "v8/src/objects/heap-number-inl.h"
+    "v8/src/objects/objects.h"
+    "v8/src/objects/objects-inl.h"
+    "v8/src/objects/slots.h"    
+    "v8/src/objects/smi.h"
+    "v8/src/objects/string.h"
+    "v8/src/objects/visitors.h"
+  )
   set(H_PRECOMP 
-    ${H_API}
     ${H_BASE}
     ${H_BUILTINS}
-    #${H_COMMON}
-    #${H_COMPILER}
-    #${H_HEAP}
-    #${H_LOGGING}
-    #${H_OBJECTS}
-    #${H_REGEXP}
-    #${H_RUNTIME}
+    ${H_API}
+    ${H_COMMON}
+    ${H_COMPILER}
+    ${H_HEAP}
+    ${H_LOGGING}
+    ${H_OBJECTS}
+    ${H_REGEXP}
+    ${H_RUNTIME}
     ${H_STRINGS}
     ${H_UTILS}
-    #${H_WASM}
+    ${H_WASM}
     )
-  target_precompile_headers(v8_libplatform PRIVATE ${H_BASE}
+  target_precompile_headers(v8_libplatform PRIVATE 
+    ${H_BASE}
     "v8/src/libplatform/default-foreground-task-runner.h"
     "v8/src/libplatform/default-job.h"
     "v8/src/libplatform/default-worker-threads-task-runner.h"
@@ -954,8 +985,18 @@ if(${USE_PRECOMPILED_HEADERS})
   target_precompile_headers(v8_libbase PRIVATE ${H_BASE})
   target_precompile_headers(bytecode_builtins_list_generator PRIVATE ${H_BASE})
 
-  target_precompile_headers(v8_base_without_compiler PRIVATE ${H_PRECOMP})
-  target_precompile_headers(v8_initializers PRIVATE ${H_PRECOMP})
+  target_precompile_headers(v8_base_without_compiler PRIVATE   
+      "v8/include/v8.h"
+      "v8/include/v8config.h"
+      "v8/src/common/globals.h"
+      "v8/src/objects/js-array-buffer.h"
+      ${H_BASE}
+      ${H_BUILTINS}
+      ${H_API}
+      ${H_UTILS}
+      ${H_WASM}
+  )
+  target_precompile_headers(v8_initializers PRIVATE ${H_BASE})
   target_precompile_headers(v8_compiler PRIVATE ${H_PRECOMP})
   target_precompile_headers(mksnapshot PRIVATE ${H_PRECOMP})
   

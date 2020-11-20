@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cstring>
 #include <deque>
 #include <map>
 #include <memory>
