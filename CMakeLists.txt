@@ -340,12 +340,6 @@ if (WIN32)
   endif()
 endif()
 
-#if using preompiled headers, _WIN32_WINNT needs to be set globally or compilation fails.
-set(v8_define_winnt)
-if (WIN32)
-set(v8_define_winnt -DUNICODE -D_WIN32_WINNT=${windows-version})
-endif()
-
 set_property(SOURCE v8/src/diagnostics/unwinding-info-win64.cc
   APPEND PROPERTY
     COMPILE_DEFINITIONS
@@ -353,7 +347,7 @@ set_property(SOURCE v8/src/diagnostics/unwinding-info-win64.cc
       _WIN32_WINNT=${windows-version}
 )
 
-target_compile_definitions(v8_base_without_compiler PRIVATE ${v8_defines} ${v8_define_winnt} $<${is-msvc}:_HAS_EXCEPTIONS=0>)
+target_compile_definitions(v8_base_without_compiler PRIVATE ${v8_defines} $<${is-msvc}:_HAS_EXCEPTIONS=0>)
 target_compile_options(v8_base_without_compiler PRIVATE ${disable-exceptions})
 
 target_include_directories(v8_base_without_compiler
