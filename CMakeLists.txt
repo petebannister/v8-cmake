@@ -879,6 +879,7 @@ target_include_directories(v8_torque_generated
 )
 
 add_custom_command(
+  COMMAND echo Generating Torque files...
   COMMAND
     torque
     -o ${PROJECT_BINARY_DIR}/torque-generated
