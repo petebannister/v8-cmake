@@ -52,7 +52,7 @@ set(is-ia32 $<OR:$<STREQUAL:${CMAKE_GENERATOR_PLATFORM},Win32>,$<STREQUAL:${CMAK
 set(is-mips 0)
 set(is-mips64 0)
 set(is-ppc 0)
-set(is-x64 0)
+
 set(is-s390 $<STREQUAL:${CMAKE_SYSTEM_PROCESSOR},S390>)
 string(CONCAT is-x64 
   $<OR:$<STREQUAL:${CMAKE_GENERATOR_PLATFORM},x64>,$<OR:$<STREQUAL:${CMAKE_GENERATOR_PLATFORM},AMD64>,$<STREQUAL:${CMAKE_GENERATOR_PLATFORM},x86_64>>>)
@@ -72,17 +72,12 @@ set(
   $<${is-win}:V8_TARGET_OS_WIN>
   $<${is-x64}:V8_TARGET_ARCH_X64>
   $<${is-ia32}:V8_TARGET_ARCH_IA32>
-  $<${is-ia32}:DISABLE_UNTRUSTED_CODE_MITIGATIONS> # lest we get FATAL("Poisoning is not supported on ia32.");
+  $<${is-ia32}:DISABLE_UNTRUSTED_CODE_MITIGATIONS> # Prevents "Poisoning not supported on ia32" build error.
   $<${is-win}:NOMINMAX>
   $<$<AND:${is-win},${is-x64}>:V8_OS_WIN_X64>
   $<$<BOOL:${V8_ENABLE_CONCURRENT_MARKING}>:V8_CONCURRENT_MARKING>
   $<${is-win}:V8_OS_WIN32>
 )
-
-set(msvc-x86-no-safeseh)
-if (${is-ia32} AND MSVC) 
-set(msvc-x86-no-safeseh /SAFESEH:NO)
-endif()
 
 set(disable-exceptions
   $<$<CXX_COMPILER_ID:MSVC>:/EHs-c->
@@ -97,8 +92,6 @@ set(enable-exceptions
   $<$<CXX_COMPILER_ID:Clang>:-fexceptions>
   $<$<CXX_COMPILER_ID:GNU>:-fexceptions>
 )
-
-set(has_control_flow_integrity ${is-arm64})
 
 #
 # d8
@@ -117,7 +110,6 @@ add_executable(
 
 target_compile_definitions(d8 PRIVATE $<${is-msvc}:_HAS_EXCEPTIONS=0>)
 target_compile_options(d8 PRIVATE ${disable-exceptions})
-target_link_options(d8 PRIVATE ${msvc-x86-no-safeseh})
 
 target_include_directories(d8
   PUBLIC
@@ -243,7 +235,6 @@ list(REMOVE_ITEM builtin-sources
 )
 
 list(REMOVE_ITEM diagnostic-sources v8/src/diagnostics/unwinding-info-win64.cc)
-#list(REMOVE_ITEM heap-sources v8/src/heap/conservative-stack-visitor.cc)
 list(REMOVE_ITEM object-sources ${i18n-sources})
 list(REMOVE_ITEM regexp-sources v8/src/regexp/gen-regexp-special-case.cc)
 list(REMOVE_ITEM runtime-sources v8/src/runtime/runtime-intl.cc)
@@ -368,12 +359,6 @@ if (WIN32)
   endif()
 endif()
 
-#if using preompiled headers, _WIN32_WINNT needs to be set globally or compilation fails.
-set(v8_define_winnt)
-if (WIN32)
-set(v8_define_winnt -DUNICODE -D_WIN32_WINNT=${windows-version})
-endif()
-
 set_property(SOURCE v8/src/diagnostics/unwinding-info-win64.cc
   APPEND PROPERTY
     COMPILE_DEFINITIONS
@@ -381,7 +366,7 @@ set_property(SOURCE v8/src/diagnostics/unwinding-info-win64.cc
       _WIN32_WINNT=${windows-version}
 )
 
-target_compile_definitions(v8_base_without_compiler PRIVATE ${v8_defines} ${v8_define_winnt} $<${is-msvc}:_HAS_EXCEPTIONS=0>)
+target_compile_definitions(v8_base_without_compiler PRIVATE ${v8_defines} $<${is-msvc}:_HAS_EXCEPTIONS=0>)
 target_compile_options(v8_base_without_compiler PRIVATE ${disable-exceptions})
 
 target_include_directories(v8_base_without_compiler
@@ -529,7 +514,6 @@ target_link_libraries(v8_snapshot
 
 # Note: allow passing in v8_random_seed
 add_custom_command(
-  COMMAND echo mksnapshot...
   COMMAND
     mksnapshot
     --embedded_src ${PROJECT_BINARY_DIR}/embedded.S
@@ -623,13 +607,11 @@ file(GLOB inspector-templates
 )
 
 add_custom_command(
-  COMMAND echo inspector_dirs...
   COMMAND ${CMAKE_COMMAND} -E make_directory ${inspector_dirs}
   OUTPUT ${inspector_dirs}
 )
 
 add_custom_command(
-  COMMAND echo python inspector code generator...
   COMMAND
     Python::Interpreter
     v8/third_party/inspector_protocol/code_generator.py
@@ -670,7 +652,6 @@ target_sources(v8_libplatform
     v8/src/libplatform/tracing/tracing-controller.cc
     v8/src/libplatform/worker-thread.cc
 )
-
 
 target_compile_definitions(v8_libplatform PRIVATE $<${is-msvc}:_HAS_EXCEPTIONS=0>)
 target_compile_options(v8_libplatform PRIVATE ${disable-exceptions})
@@ -740,7 +721,7 @@ set_property(SOURCE v8/src/base/utils/random-number-generator.cc
   APPEND PROPERTY COMPILE_DEFINITIONS _CRT_RAND_S
 )
 
-target_compile_definitions(v8_libbase PRIVATE $<${is-win}:UNICODE> $<${is-msvc}:_HAS_EXCEPTIONS=0> _CRT_RAND_S)
+target_compile_definitions(v8_libbase PRIVATE $<${is-win}:UNICODE> $<${is-msvc}:_HAS_EXCEPTIONS=0>)
 target_compile_options(v8_libbase PRIVATE ${disable-exceptions})
 target_include_directories(v8_libbase PRIVATE ${PROJECT_SOURCE_DIR}/v8)
 target_link_libraries(v8_libbase
@@ -881,15 +862,20 @@ target_include_directories(v8_torque_generated
     ${PROJECT_SOURCE_DIR}/v8
 )
 
+# The torque-outputs and torque_outputs variables can have too many characters
+# on Windows to be executed on the command line, so we have to write it to a
+# temporary file and execute that 
+file(WRITE "${PROJECT_BINARY_DIR}/touch_torque_outputs.cmake"
+           "file(TOUCH ${torque-outputs};${torque_outputs})")
+
 add_custom_command(
-  COMMAND echo Generating Torque files...
   COMMAND
     torque
     -o ${PROJECT_BINARY_DIR}/torque-generated
     -v8-root ${PROJECT_SOURCE_DIR}/v8
     ${torque_files}
   COMMAND
-    ${CMAKE_COMMAND} -E touch ${torque-outputs} ${torque_outputs}
+    ${CMAKE_COMMAND} -P ${PROJECT_BINARY_DIR}/touch_torque_outputs.cmake
   DEPENDS
     torque
     ${torque_dirs}
@@ -900,7 +886,6 @@ add_custom_command(
 )
 
 add_custom_command(
-  COMMAND echo make torque directories...
   COMMAND
     ${CMAKE_COMMAND} -E make_directory ${torque_dirs}
   OUTPUT
@@ -940,7 +925,6 @@ add_executable(mksnapshot
 
 target_compile_definitions(mksnapshot PRIVATE $<${is-msvc}:_HAS_EXCEPTIONS=0>)
 target_compile_options(mksnapshot PRIVATE ${disable-exceptions})
-target_link_options(mksnapshot PRIVATE ${msvc-x86-no-safeseh})
 target_include_directories(mksnapshot PRIVATE ${PROJECT_SOURCE_DIR}/v8)
 target_link_libraries(mksnapshot
   PRIVATE
@@ -958,4 +942,3 @@ target_include_directories(v8-adler32
   PUBLIC
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/v8/third_party/zlib>
 )
-
