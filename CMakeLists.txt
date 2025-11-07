@@ -529,6 +529,7 @@ target_link_libraries(v8_snapshot
 
 # Note: allow passing in v8_random_seed
 add_custom_command(
+  COMMAND echo mksnapshot...
   COMMAND
     mksnapshot
     --embedded_src ${PROJECT_BINARY_DIR}/embedded.S
@@ -622,11 +623,13 @@ file(GLOB inspector-templates
 )
 
 add_custom_command(
+  COMMAND echo inspector_dirs...
   COMMAND ${CMAKE_COMMAND} -E make_directory ${inspector_dirs}
   OUTPUT ${inspector_dirs}
 )
 
 add_custom_command(
+  COMMAND echo python inspector code generator...
   COMMAND
     Python::Interpreter
     v8/third_party/inspector_protocol/code_generator.py
@@ -897,6 +900,7 @@ add_custom_command(
 )
 
 add_custom_command(
+  COMMAND echo make torque directories...
   COMMAND
     ${CMAKE_COMMAND} -E make_directory ${torque_dirs}
   OUTPUT
