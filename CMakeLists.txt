@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.4)
+cmake_minimum_required(VERSION 3.15)
 set(CMAKE_USER_MAKE_RULES_OVERRIDE "${CMAKE_CURRENT_SOURCE_DIR}/cmake/MSVC.cmake")
 set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
 project(V8 LANGUAGES CXX C ASM)
@@ -47,16 +47,17 @@ set(is-msvc $<CXX_COMPILER_ID:MSVC>)
 # FIXME obviously
 set(is-arm 0)
 set(is-arm64 0)
-set(is-ia32 0)
+set(is-ia32 $<OR:$<STREQUAL:${CMAKE_GENERATOR_PLATFORM},Win32>,$<STREQUAL:${CMAKE_GENERATOR_PLATFORM},x86>>)
+
 set(is-mips 0)
 set(is-mips64 0)
 set(is-ppc 0)
 
 set(is-s390 $<STREQUAL:${CMAKE_SYSTEM_PROCESSOR},S390>)
-string(CONCAT is-x64 $<OR:
-  $<STREQUAL:${CMAKE_SYSTEM_PROCESSOR},AMD64>,
-  $<STREQUAL:${CMAKE_SYSTEM_PROCESSOR},x86_64>
->)
+string(CONCAT is-x64 
+  $<OR:$<STREQUAL:${CMAKE_GENERATOR_PLATFORM},x64>,$<OR:$<STREQUAL:${CMAKE_GENERATOR_PLATFORM},AMD64>,$<STREQUAL:${CMAKE_GENERATOR_PLATFORM},x86_64>>>)
+
+message(STATUS "Building for platform: ${CMAKE_SYSTEM_NAME} ${CMAKE_GENERATOR_PLATFORM}")
 
 option(V8_ENABLE_CONCURRENT_MARKING "Enable concurrent marking" ON)
 option(V8_ENABLE_I18N "Enable Internationalization support")
@@ -70,6 +71,8 @@ set(
   $<${is-win}:V8_HAVE_TARGET_OS>
   $<${is-win}:V8_TARGET_OS_WIN>
   $<${is-x64}:V8_TARGET_ARCH_X64>
+  $<${is-ia32}:V8_TARGET_ARCH_IA32>
+  $<${is-ia32}:DISABLE_UNTRUSTED_CODE_MITIGATIONS> # Prevents "Poisoning not supported on ia32" build error.
   $<${is-win}:NOMINMAX>
   $<$<AND:${is-win},${is-x64}>:V8_OS_WIN_X64>
   $<$<BOOL:${V8_ENABLE_CONCURRENT_MARKING}>:V8_CONCURRENT_MARKING>
@@ -125,10 +128,6 @@ target_link_libraries(d8
     v8_libplatform
 )
 
-# more granular library support
-add_library(v8-i18n-support OBJECT)
-set_property(TARGET v8-i18n-support PROPERTY EXCLUDE_FROM_ALL ON)
-
 list(APPEND i18n-sources
   v8/src/builtins/builtins-intl.cc
   v8/src/objects/intl-objects.cc
@@ -148,17 +147,23 @@ list(APPEND i18n-sources
   v8/src/strings/char-predicates.cc
 )
 
-target_sources(v8-i18n-support PRIVATE ${i18n-sources})
-target_compile_definitions(v8-i18n-support PRIVATE $<${is-msvc}:_HAS_EXCEPTIONS=0>)
-target_compile_options(v8-i18n-support PRIVATE ${disable-exceptions})
-target_link_libraries(v8-i18n-support PRIVATE v8_torque_generated)
+if (V8_ENABLE_I18N)
+  # more granular library support
+  add_library(v8-i18n-support OBJECT)
+  set_property(TARGET v8-i18n-support PROPERTY EXCLUDE_FROM_ALL ON)
 
-target_include_directories(v8-i18n-support
-  PRIVATE
-    ${PROJECT_SOURCE_DIR}/v8
-    ${PROJECT_SOURCE_DIR}/v8/src/objects
-    ${PROJECT_SOURCE_DIR}/v8/include
-)
+  target_sources(v8-i18n-support PRIVATE ${i18n-sources})
+  target_compile_definitions(v8-i18n-support PRIVATE $<${is-msvc}:_HAS_EXCEPTIONS=0>)
+  target_compile_options(v8-i18n-support PRIVATE ${disable-exceptions})
+  target_link_libraries(v8-i18n-support PRIVATE v8_torque_generated)
+
+  target_include_directories(v8-i18n-support
+    PRIVATE
+      ${PROJECT_SOURCE_DIR}/v8
+      ${PROJECT_SOURCE_DIR}/v8/src/objects
+      ${PROJECT_SOURCE_DIR}/v8/include
+  )
+endif()
 
 file(GLOB api-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/api/*.cc)
 file(GLOB asmjs-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/asmjs/*.cc)
@@ -203,6 +208,9 @@ list(REMOVE_ITEM heap-sources
 )
 
 if(WIN32)
+  set_property(SOURCE "v8/src/heap/base/asm/arm64/push_registers_masm.S" PROPERTY LANGUAGE ASM_MASM)
+  set_property(SOURCE "v8/src/heap/base/asm/ia32/push_registers_masm.S" PROPERTY LANGUAGE ASM_MASM)
+  set_property(SOURCE "v8/src/heap/base/asm/x64/push_registers_masm.S" PROPERTY LANGUAGE ASM_MASM)
   list(APPEND heap-sources
     $<${is-arm64}:v8/src/heap/base/asm/arm64/push_registers_masm.S>
     $<${is-ia32}:v8/src/heap/base/asm/ia32/push_registers_masm.S>
@@ -246,6 +254,7 @@ add_library(v8_base_without_compiler STATIC
   $<$<AND:${is-x64},${is-win}>:v8/src/diagnostics/unwinding-info-win64.cc>
   $<$<AND:${is-x64},${is-win}>:v8/src/trap-handler/handler-inside-win.cc>
   $<$<AND:${is-x64},${is-win}>:v8/src/trap-handler/handler-outside-win.cc>
+
   $<${is-x64}:v8/src/codegen/x64/assembler-x64.cc>
   $<${is-x64}:v8/src/codegen/x64/cpu-x64.cc>
   $<${is-x64}:v8/src/codegen/x64/interface-descriptors-x64.cc>
@@ -260,7 +269,23 @@ add_library(v8_base_without_compiler STATIC
   $<${is-x64}:v8/src/diagnostics/x64/eh-frame-x64.cc>
   $<${is-x64}:v8/src/execution/x64/frame-constants-x64.cc>
   $<${is-x64}:v8/src/regexp/x64/regexp-macro-assembler-x64.cc>
+  
+  $<${is-ia32}:v8/src/codegen/ia32/assembler-ia32.cc>
+  $<${is-ia32}:v8/src/codegen/ia32/cpu-ia32.cc>
+  $<${is-ia32}:v8/src/codegen/ia32/interface-descriptors-ia32.cc>
+  $<${is-ia32}:v8/src/codegen/ia32/macro-assembler-ia32.cc>
+  $<${is-ia32}:v8/src/compiler/backend/ia32/code-generator-ia32.cc>
+  $<${is-ia32}:v8/src/compiler/backend/ia32/instruction-scheduler-ia32.cc>
+  $<${is-ia32}:v8/src/compiler/backend/ia32/instruction-selector-ia32.cc>
+  $<${is-ia32}:v8/src/debug/ia32/debug-ia32.cc>
+  $<${is-ia32}:v8/src/deoptimizer/ia32/deoptimizer-ia32.cc>
+  $<${is-ia32}:v8/src/diagnostics/ia32/disasm-ia32.cc>
+  $<${is-ia32}:v8/src/diagnostics/ia32/unwinder-ia32.cc>
+  $<${is-ia32}:v8/src/execution/ia32/frame-constants-ia32.cc>
+  $<${is-ia32}:v8/src/regexp/ia32/regexp-macro-assembler-ia32.cc>
+  
   $<$<BOOL:${V8_ENABLE_I18N}>:$<TARGET_OBJECTS:v8-i18n-support>>
+
   ${api-sources}
   ${asmjs-sources}
   ${ast-sources}
@@ -494,6 +519,7 @@ add_custom_command(
     --embedded_src ${PROJECT_BINARY_DIR}/embedded.S
     --startup_src ${PROJECT_BINARY_DIR}/snapshot.cc
     $<${is-x64}:--target_arch=x64>
+    $<${is-ia32}:--target_arch=ia32>
     $<$<PLATFORM_ID:Darwin>:--target_os=mac>
     $<$<PLATFORM_ID:Linux>:--target_os=linux>
     $<$<PLATFORM_ID:Windows>:--target_os=win>
