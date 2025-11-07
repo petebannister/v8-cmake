@@ -14,7 +14,14 @@
 """
 import types
 import operator
-from collections import Mapping
+
+try:
+    # Python 3.3+: Import from collections.abc
+    from collections.abc import Mapping
+except ImportError:
+    # Fallback for Python <3.3: Use the deprecated alias
+    from collections import Mapping
+
 from jinja2.environment import Environment
 from jinja2.exceptions import SecurityError
 from jinja2._compat import string_types, PY2
