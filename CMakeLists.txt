@@ -75,11 +75,12 @@ set(
   $<${is-linux}:V8_TARGET_OS_LINUX>
   $<${is-win}:V8_HAVE_TARGET_OS>
   $<${is-win}:V8_TARGET_OS_WIN>
+  $<${is-win}:UNICODE>
   $<${is-x64}:V8_TARGET_ARCH_X64>
   $<${is-ia32}:V8_TARGET_ARCH_IA32>
   $<${is-ia32}:DISABLE_UNTRUSTED_CODE_MITIGATIONS> # Prevents "Poisoning not supported on ia32" build error.
   $<${is-win}:NOMINMAX>
-  $<$<AND:${is-win},${is-x64}>:V8_OS_WIN_X64>
+  # $<$<AND:${is-win},${is-x64}>:V8_OS_WIN_X64>
   $<$<BOOL:${V8_ENABLE_CONCURRENT_MARKING}>:V8_CONCURRENT_MARKING>
   $<${is-win}:V8_OS_WIN32>
 )
@@ -371,7 +372,8 @@ set_property(SOURCE v8/src/diagnostics/unwinding-info-win64.cc
       _WIN32_WINNT=${windows-version}
 )
 
-target_compile_definitions(v8_base_without_compiler PRIVATE ${v8_defines} $<${is-msvc}:_HAS_EXCEPTIONS=0>)
+target_compile_definitions(v8_base_without_compiler PRIVATE ${v8_defines} $<${is-msvc}:_HAS_EXCEPTIONS=0> UNICODE _WIN32_WINNT=${windows-version})
+
 target_compile_options(v8_base_without_compiler PRIVATE ${disable-exceptions})
 
 target_include_directories(v8_base_without_compiler
@@ -1008,7 +1010,7 @@ if(${USE_PRECOMPILED_HEADERS})
   target_precompile_headers(v8_libbase PRIVATE ${H_BASE})
   target_precompile_headers(bytecode_builtins_list_generator PRIVATE ${H_BASE})
 
-  target_precompile_headers(v8_base_without_compiler PRIVATE   
+  target_precompile_headers(v8_base_without_compiler PRIVATE
       "v8/include/v8.h"
       "v8/include/v8config.h"
       "v8/src/common/globals.h"
