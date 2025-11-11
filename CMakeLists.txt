@@ -11,6 +11,8 @@ endif()
 if(MSVC)
   enable_language(ASM_MASM)
   set_property(SOURCE ${PROJECT_BINARY_DIR}/embedded.S PROPERTY LANGUAGE ASM_MASM)
+  set_property(SOURCE ${PROJECT_BINARY_DIR}/embedded.S 
+    APPEND PROPERTY COMPILE_OPTIONS /safeseh)
 endif()
 
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
@@ -217,6 +219,17 @@ if(WIN32)
   set_property(SOURCE "v8/src/heap/base/asm/arm64/push_registers_masm.S" PROPERTY LANGUAGE ASM_MASM)
   set_property(SOURCE "v8/src/heap/base/asm/ia32/push_registers_masm.S" PROPERTY LANGUAGE ASM_MASM)
   set_property(SOURCE "v8/src/heap/base/asm/x64/push_registers_masm.S" PROPERTY LANGUAGE ASM_MASM)
+
+  if (MSVC)
+    # Prevent build failing due to "module unsafe for SAFESE image" error.
+    set_property(SOURCE "v8/src/heap/base/asm/arm64/push_registers_masm.S" 
+      APPEND PROPERTY COMPILE_OPTIONS /safeseh)
+    set_property(SOURCE "v8/src/heap/base/asm/ia32/push_registers_masm.S" 
+      APPEND PROPERTY COMPILE_OPTIONS /safeseh)
+    set_property(SOURCE "v8/src/heap/base/asm/x64/push_registers_masm.S" 
+      APPEND PROPERTY COMPILE_OPTIONS /safeseh)
+  endif()
+
   list(APPEND heap-sources
     $<${is-arm64}:v8/src/heap/base/asm/arm64/push_registers_masm.S>
     $<${is-ia32}:v8/src/heap/base/asm/ia32/push_registers_masm.S>
