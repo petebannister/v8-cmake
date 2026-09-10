@@ -21,7 +21,8 @@ if(WIN32)
   add_definitions("-DNOMINMAX -DV8_ENABLE_SYSTEM_INSTRUMENTATION")
   # todo: for zlib, need to extract zlib when refactor
   add_definitions("-DX86_WINDOWS")
-  add_definitions("-D_WIN32_WINNT=0x0602")
+  add_definitions("-D_WIN32_WINNT=0x0A00")
+  add_definitions("-DNTDDI_VERSION=0x0A000008")
 endif()
 
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
@@ -916,6 +917,7 @@ add_executable(
 target_include_directories(bytecode_builtins_list_generator
   PRIVATE
     ${PROJECT_SOURCE_DIR}/v8
+    ${PROJECT_SOURCE_DIR}/v8/include
 )
 
 target_link_libraries(bytecode_builtins_list_generator v8_libbase)
@@ -1021,7 +1023,11 @@ target_compile_options(v8_torque_generated PRIVATE ${disable-exceptions})
 if(enable-fPIC)
   target_compile_options(v8_torque_generated PRIVATE ${enable-fpic})
 endif()
-target_link_libraries(v8_torque_generated PRIVATE v8-bytecodes-builtin-list)
+target_link_libraries(v8_torque_generated
+  PRIVATE
+    v8-bytecodes-builtin-list
+    absl::int128
+)
 
 target_include_directories(v8_torque_generated
   PUBLIC
@@ -1072,8 +1078,35 @@ file(GLOB torque-program-sources
 add_executable(torque)
 target_sources(torque PRIVATE ${torque-program-sources})
 target_compile_options(torque PRIVATE ${enable-exceptions})
-target_include_directories(torque PRIVATE ${PROJECT_SOURCE_DIR}/v8)
-target_link_libraries(torque PRIVATE v8_libbase)
+# torque fails to build due to tsa-generator.cc not including <variant>
+# Fix that by using precompiled headers to include <variant>
+# may as well include other commonly used headers to speed up compilation.
+target_precompile_headers(torque
+  PRIVATE
+    <algorithm>
+    <fstream>
+    <iostream>
+    <map>
+    <memory>
+    <optional>
+    <set>
+    <sstream>
+    <string>
+    <unordered_map>
+    <variant>
+    <vector>
+)
+target_include_directories(torque
+  PRIVATE
+    ${PROJECT_SOURCE_DIR}/v8
+    ${PROJECT_SOURCE_DIR}/v8/include
+)
+target_link_libraries(torque
+  PRIVATE
+    v8_libbase
+    absl::node_hash_map
+    absl::node_hash_set
+)
 
 #
 # mksnapshot
