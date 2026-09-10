@@ -604,7 +604,9 @@ void SharedMacroAssemblerBase::I16x8ExtMulHighS(XMMRegister dst,
     vpsraw(dst, dst, 8);
     vpmullw(dst, dst, scratch);
   } else {
-    if (dst != src1) {
+    if (dst == src2 && src1 != src2) {
+      std::swap(src1, src2);
+    } else if (dst != src1) {
       movaps(dst, src1);
     }
     movaps(scratch, src2);
@@ -646,7 +648,7 @@ void SharedMacroAssemblerBase::I16x8ExtMulHighU(XMMRegister dst,
         movaps(dst, src1);
       }
       punpckhbw(dst, scratch);
-      pmullw(dst, scratch);
+      pmullw(dst, dst);
     } else {
       // When dst == src1, nothing special needs to be done.
       // When dst == src2, swap src1 and src2, since we overwrite dst.
@@ -744,6 +746,7 @@ void SharedMacroAssemblerBase::I16x8DotI8x16I7x16S(XMMRegister dst,
     vpmaddubsw(dst, src2, src1);
   } else {
     if (dst != src2) {
+      DCHECK_NE(dst, src1);
       movdqa(dst, src2);
     }
     pmaddubsw(dst, src1);
@@ -754,6 +757,32 @@ void SharedMacroAssemblerBase::I32x4DotI8x16I7x16AddS(
     XMMRegister dst, XMMRegister src1, XMMRegister src2, XMMRegister src3,
     XMMRegister scratch, XMMRegister splat_reg) {
   ASM_CODE_COMMENT(this);
+#if V8_TARGET_ARCH_X64
+  if (CpuFeatures::IsSupported(AVX_VNNI_INT8)) {
+    CpuFeatureScope avx_vnni_int8_scope(this, AVX_VNNI_INT8);
+    if (dst == src3) {
+      vpdpbssd(dst, src2, src1);
+    } else {
+      DCHECK_NE(dst, src1);
+      DCHECK_NE(dst, src2);
+      Movdqa(dst, src3);
+      vpdpbssd(dst, src2, src1);
+    }
+    return;
+  } else if (CpuFeatures::IsSupported(AVX_VNNI)) {
+    CpuFeatureScope avx_scope(this, AVX_VNNI);
+    if (dst == src3) {
+      vpdpbusd(dst, src2, src1);
+    } else {
+      DCHECK_NE(dst, src1);
+      DCHECK_NE(dst, src2);
+      Movdqa(dst, src3);
+      vpdpbusd(dst, src2, src1);
+    }
+    return;
+  }
+#endif
+
   // k = i16x8.splat(1)
   Pcmpeqd(splat_reg, splat_reg);
   Psrlw(splat_reg, splat_reg, uint8_t{15});
@@ -999,6 +1028,16 @@ void SharedMacroAssemblerBase::I64x2ShrS(XMMRegister dst, XMMRegister src,
   DCHECK_GT(64, shift);
   DCHECK_NE(xmm_tmp, dst);
   DCHECK_NE(xmm_tmp, src);
+  // Optimization for shift == 63, replicating the sign bit across the vector.
+  // This is a common pattern for sign extension.
+  if (shift == 63) {
+    // Broadcast the sign bit (high dword) of each qword to both dwords.
+    Pshufd(dst, src, uint8_t(0xf5));
+    // Arithmetic shift to fill the entire lane with the sign bit.
+    Psrad(dst, uint8_t(31));
+    return;
+  }
+
   // Use logical right shift to emulate arithmetic right shifts:
   // Given:
   // signed >> c
@@ -1215,7 +1254,7 @@ void SharedMacroAssemblerBase::S128Load8Splat(XMMRegister dst, Operand src,
                                               XMMRegister scratch) {
   ASM_CODE_COMMENT(this);
   // The trap handler uses the current pc to creating a landing, so that it can
-  // determine if a trap occured in Wasm code due to a OOB load. Make sure the
+  // determine if a trap occurred in Wasm code due to a OOB load. Make sure the
   // first instruction in each case below is the one that loads.
   if (CpuFeatures::IsSupported(AVX2)) {
     CpuFeatureScope avx2_scope(this, AVX2);
@@ -1238,7 +1277,7 @@ void SharedMacroAssemblerBase::S128Load16Splat(XMMRegister dst, Operand src,
                                                XMMRegister scratch) {
   ASM_CODE_COMMENT(this);
   // The trap handler uses the current pc to creating a landing, so that it can
-  // determine if a trap occured in Wasm code due to a OOB load. Make sure the
+  // determine if a trap occurred in Wasm code due to a OOB load. Make sure the
   // first instruction in each case below is the one that loads.
   if (CpuFeatures::IsSupported(AVX2)) {
     CpuFeatureScope avx2_scope(this, AVX2);
@@ -1259,7 +1298,7 @@ void SharedMacroAssemblerBase::S128Load16Splat(XMMRegister dst, Operand src,
 void SharedMacroAssemblerBase::S128Load32Splat(XMMRegister dst, Operand src) {
   ASM_CODE_COMMENT(this);
   // The trap handler uses the current pc to creating a landing, so that it can
-  // determine if a trap occured in Wasm code due to a OOB load. Make sure the
+  // determine if a trap occurred in Wasm code due to a OOB load. Make sure the
   // first instruction in each case below is the one that loads.
   if (CpuFeatures::IsSupported(AVX)) {
     CpuFeatureScope avx_scope(this, AVX);
@@ -1280,75 +1319,6 @@ void SharedMacroAssemblerBase::S128Store64Lane(Operand dst, XMMRegister src,
     Movhps(dst, src);
   }
 }
-
-// Helper macro to define qfma macro-assembler. This takes care of every
-// possible case of register aliasing to minimize the number of instructions.
-#define QFMA(ps_or_pd)                        \
-  if (CpuFeatures::IsSupported(FMA3)) {       \
-    CpuFeatureScope fma3_scope(this, FMA3);   \
-    if (dst == src1) {                        \
-      vfmadd213##ps_or_pd(dst, src2, src3);   \
-    } else if (dst == src2) {                 \
-      vfmadd213##ps_or_pd(dst, src1, src3);   \
-    } else if (dst == src3) {                 \
-      vfmadd231##ps_or_pd(dst, src2, src1);   \
-    } else {                                  \
-      CpuFeatureScope avx_scope(this, AVX);   \
-      vmovups(dst, src1);                     \
-      vfmadd213##ps_or_pd(dst, src2, src3);   \
-    }                                         \
-  } else if (CpuFeatures::IsSupported(AVX)) { \
-    CpuFeatureScope avx_scope(this, AVX);     \
-    vmul##ps_or_pd(tmp, src1, src2);          \
-    vadd##ps_or_pd(dst, tmp, src3);           \
-  } else {                                    \
-    if (dst == src1) {                        \
-      mul##ps_or_pd(dst, src2);               \
-      add##ps_or_pd(dst, src3);               \
-    } else if (dst == src2) {                 \
-      DCHECK_NE(src2, src1);                  \
-      mul##ps_or_pd(dst, src1);               \
-      add##ps_or_pd(dst, src3);               \
-    } else if (dst == src3) {                 \
-      DCHECK_NE(src3, src1);                  \
-      movaps(tmp, src1);                      \
-      mul##ps_or_pd(tmp, src2);               \
-      add##ps_or_pd(dst, tmp);                \
-    } else {                                  \
-      movaps(dst, src1);                      \
-      mul##ps_or_pd(dst, src2);               \
-      add##ps_or_pd(dst, src3);               \
-    }                                         \
-  }
-
-// Helper macro to define qfms macro-assembler. This takes care of every
-// possible case of register aliasing to minimize the number of instructions.
-#define QFMS(ps_or_pd)                        \
-  if (CpuFeatures::IsSupported(FMA3)) {       \
-    CpuFeatureScope fma3_scope(this, FMA3);   \
-    if (dst == src1) {                        \
-      vfnmadd213##ps_or_pd(dst, src2, src3);  \
-    } else if (dst == src2) {                 \
-      vfnmadd213##ps_or_pd(dst, src1, src3);  \
-    } else if (dst == src3) {                 \
-      vfnmadd231##ps_or_pd(dst, src2, src1);  \
-    } else {                                  \
-      CpuFeatureScope avx_scope(this, AVX);   \
-      vmovups(dst, src1);                     \
-      vfnmadd213##ps_or_pd(dst, src2, src3);  \
-    }                                         \
-  } else if (CpuFeatures::IsSupported(AVX)) { \
-    CpuFeatureScope avx_scope(this, AVX);     \
-    vmul##ps_or_pd(tmp, src1, src2);          \
-    vsub##ps_or_pd(dst, src3, tmp);           \
-  } else {                                    \
-    movaps(tmp, src1);                        \
-    mul##ps_or_pd(tmp, src2);                 \
-    if (dst != src3) {                        \
-      movaps(dst, src3);                      \
-    }                                         \
-    sub##ps_or_pd(dst, tmp);                  \
-  }
 
 void SharedMacroAssemblerBase::F32x4Qfma(XMMRegister dst, XMMRegister src1,
                                          XMMRegister src2, XMMRegister src3,

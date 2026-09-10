@@ -5,6 +5,7 @@
 #ifndef V8_COMPILER_BACKEND_REGISTER_ALLOCATION_H_
 #define V8_COMPILER_BACKEND_REGISTER_ALLOCATION_H_
 
+#include "src/base/logging.h"
 #include "src/codegen/register-configuration.h"
 #include "src/zone/zone.h"
 
@@ -24,6 +25,7 @@ inline int GetRegisterCount(const RegisterConfiguration* config,
     case RegisterKind::kSimd128:
       return config->num_simd128_registers();
   }
+  UNREACHABLE();
 }
 
 inline int GetAllocatableRegisterCount(const RegisterConfiguration* config,
@@ -36,6 +38,7 @@ inline int GetAllocatableRegisterCount(const RegisterConfiguration* config,
     case RegisterKind::kSimd128:
       return config->num_allocatable_simd128_registers();
   }
+  UNREACHABLE();
 }
 
 inline const int* GetAllocatableRegisterCodes(
@@ -48,6 +51,7 @@ inline const int* GetAllocatableRegisterCodes(
     case RegisterKind::kSimd128:
       return config->allocatable_simd128_codes();
   }
+  UNREACHABLE();
 }
 
 inline int ByteWidthForStackSlot(MachineRepresentation rep) {
@@ -56,6 +60,7 @@ inline int ByteWidthForStackSlot(MachineRepresentation rep) {
     case MachineRepresentation::kWord8:
     case MachineRepresentation::kWord16:
     case MachineRepresentation::kWord32:
+    case MachineRepresentation::kFloat16:
     case MachineRepresentation::kFloat32:
     case MachineRepresentation::kSandboxedPointer:
       return kSystemPointerSize;
@@ -64,6 +69,7 @@ inline int ByteWidthForStackSlot(MachineRepresentation rep) {
     case MachineRepresentation::kTagged:
     case MachineRepresentation::kCompressedPointer:
     case MachineRepresentation::kCompressed:
+    case MachineRepresentation::kProtectedPointer:
       // TODO(ishell): kTaggedSize once half size locations are supported.
       return kSystemPointerSize;
     case MachineRepresentation::kWord64:
@@ -75,26 +81,12 @@ inline int ByteWidthForStackSlot(MachineRepresentation rep) {
       return kSimd256Size;
     case MachineRepresentation::kNone:
     case MachineRepresentation::kMapWord:
-      break;
+    case MachineRepresentation::kIndirectPointer:
+    case MachineRepresentation::kFloat16RawBits:
+      UNREACHABLE();
   }
   UNREACHABLE();
 }
-
-class RegisterAllocationData : public ZoneObject {
- public:
-  enum Type {
-    kTopTier,
-    kMidTier,
-  };
-
-  Type type() const { return type_; }
-
- protected:
-  explicit RegisterAllocationData(Type type) : type_(type) {}
-
- private:
-  Type type_;
-};
 
 }  // namespace compiler
 }  // namespace internal

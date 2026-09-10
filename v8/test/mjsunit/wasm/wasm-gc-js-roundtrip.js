@@ -2,14 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Flags: --experimental-wasm-gc
-
 d8.file.execute('test/mjsunit/wasm/wasm-module-builder.js');
 
 let instance = (() => {
   let builder = new WasmModuleBuilder();
   let struct = builder.addStruct([makeField(kWasmI32, true)]);
-  let array = builder.addArray(kWasmF64, true);
+  let array = builder.addArray(kWasmF64);
   let sig = builder.addType(makeSig([kWasmI32], [kWasmI32]));
 
   let func = builder.addFunction('inc', sig)
@@ -28,7 +26,7 @@ let instance = (() => {
       .exportFunc();
 
   builder.addFunction('i31_as_eq_producer', makeSig([], [kWasmEqRef]))
-      .addBody([kExprI32Const, 5, kGCPrefix, kExprI31New])
+      .addBody([kExprI32Const, 5, kGCPrefix, kExprRefI31])
       .exportFunc();
 
   builder.addFunction('func_producer', makeSig([], [wasmRefType(sig)]))

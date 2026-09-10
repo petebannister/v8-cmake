@@ -2,11 +2,37 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "src/base/cpu.h"
+#include "src/base/cpu/cpu.h"
+
+#include "src/heap/base/memory-tagging.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace v8 {
 namespace base {
+
+
+#if defined(V8_HOST_ARCH_ARM64)
+TEST(CPUTest, SuppressTagCheckingScope) {
+  CPU cpu;
+  if (!cpu.has_mte()) GTEST_SKIP();
+
+  // Read the current value of PSTATE.TCO (it should be zero).
+  uint64_t val;
+  asm volatile(".arch_extension memtag \n mrs %0, tco" : "=r" (val));
+  EXPECT_EQ(val, 0u);
+
+  // Create a scope where MTE tag checks are temporarily suspended.
+  {
+    heap::base::SuspendTagCheckingScope s;
+    asm volatile(".arch_extension memtag \n mrs %0, tco" : "=r" (val));
+    EXPECT_EQ(val, 1u << 25);
+  }
+
+  // Check that the scope restores TCO afterwards.
+  asm volatile(".arch_extension memtag \n mrs %0, tco" : "=r" (val));
+  EXPECT_EQ(val, 0u);
+}
+#endif
 
 TEST(CPUTest, FeatureImplications) {
   CPU cpu;
