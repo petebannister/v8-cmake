@@ -412,7 +412,6 @@ add_library(v8_base_without_compiler STATIC
   v8/src/ic/stub-cache.cc
   v8/src/init/bootstrapper.cc
   v8/src/init/icu_util.cc
-  v8/src/init/isolate-allocator.cc
   v8/src/init/startup-data-util.cc
   v8/src/init/v8.cc
   ${handles-sources}
@@ -432,14 +431,12 @@ add_library(v8_base_without_compiler STATIC
   v8/src/tasks/cancelable-task.cc
   v8/src/tasks/operations-barrier.cc
   v8/src/tasks/task-utils.cc
-  v8/src/third_party/siphash/halfsiphash.cc
   v8/src/tracing/trace-event.cc
   v8/src/tracing/traced-value.cc
   v8/src/tracing/tracing-category-observer.cc
   v8/src/trap-handler/handler-inside.cc
   v8/src/trap-handler/handler-outside.cc
   v8/src/trap-handler/handler-shared.cc
-  v8/src/temporal/temporal-parser.cc
   ${utils-sources}
   ${wasm-sources}
   ${zone-sources}
@@ -561,7 +558,6 @@ add_library(
   v8/src/builtins/builtins-internal-gen.cc
   v8/src/builtins/builtins-interpreter-gen.cc
   v8/src/builtins/builtins-iterator-gen.cc
-  v8/src/builtins/builtins-lazy-gen.cc
   v8/src/builtins/builtins-microtask-queue-gen.cc
   v8/src/builtins/builtins-number-gen.cc
   v8/src/builtins/builtins-object-gen.cc
@@ -814,7 +810,6 @@ target_link_libraries(v8_libsampler PRIVATE v8_libbase)
 add_library(v8_libbase STATIC
   v8/src/base/bits.cc
   v8/src/base/bounded-page-allocator.cc
-  v8/src/base/cpu.cc
   v8/src/base/debug/stack_trace.cc
   v8/src/base/division-by-constant.cc
   v8/src/base/file-utils.cc
