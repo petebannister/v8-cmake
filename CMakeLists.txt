@@ -829,6 +829,9 @@ target_link_libraries(v8_libsampler PRIVATE v8_libbase)
 
 add_subdirectory(v8/third_party/abseil-cpp EXCLUDE_FROM_ALL)
 
+add_library(v8_simdutf STATIC v8/third_party/simdutf/simdutf.cpp)
+target_include_directories(v8_simdutf PUBLIC ${PROJECT_SOURCE_DIR}/v8)
+
 add_library(v8_libbase STATIC
   v8/src/base/abort-mode.cc
   v8/src/base/bits.cc
@@ -939,6 +942,10 @@ file(GLOB_RECURSE torque-objects
 
 list(APPEND torque_files ${torque-builtins})
 list(APPEND torque_files ${torque-objects})
+list(REMOVE_ITEM torque_files
+  src/objects/js-temporal-objects.tq
+  src/builtins/wasm-interpreter-wrappers.tq
+)
 
 list(APPEND torque_files
   src/debug/debug-wasm-objects.tq
@@ -1018,6 +1025,12 @@ add_library(
   ${torque_outputs}
 )
 
+set_target_properties(v8_torque_generated PROPERTIES
+  UNITY_BUILD ON
+  UNITY_BUILD_MODE BATCH
+  UNITY_BUILD_BATCH_SIZE 64
+)
+
 target_compile_definitions(v8_torque_generated PRIVATE $<${is-msvc}:_HAS_EXCEPTIONS=0>)
 target_compile_options(v8_torque_generated PRIVATE ${disable-exceptions})
 if(enable-fPIC)
@@ -1027,10 +1040,12 @@ target_link_libraries(v8_torque_generated
   PRIVATE
     v8-bytecodes-builtin-list
     absl::int128
+    v8_simdutf
 )
 
 target_include_directories(v8_torque_generated
   PUBLIC
+    ${PROJECT_SOURCE_DIR}/v8/third_party/fp16/src/include
     ${PROJECT_BINARY_DIR}
     ${PROJECT_SOURCE_DIR}/v8/include
     ${PROJECT_SOURCE_DIR}/v8
