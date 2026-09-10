@@ -25,6 +25,12 @@
     "path": "third_party/fp16/src"
   },
   {
+    "url": "https://chromium.googlesource.com/external/github.com/google/highway.git",
+    "commit": "2607d3b5b0113992fe84d3848859eae13b3b52c1",
+    "branch": "master",
+    "path": "third_party/highway/src"
+  },
+  {
     "url": "https://chromium.googlesource.com/chromium/src/third_party/simdutf",
     "commit": "f7356eed293f8208c40b3c1b344a50bd70971983",
     "branch": "main",

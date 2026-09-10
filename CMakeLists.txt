@@ -4,6 +4,8 @@ set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
 project(V8 LANGUAGES CXX C ASM)
 
 option(V8CMAKE_FIND_PYTHON "Enable finding python" ON)
+option(V8CMAKE_UNITY_BUILD "Enable unity builds for large V8 libraries" ON)
+set(V8CMAKE_UNITY_BUILD_BATCH_SIZE 32 CACHE STRING "Source files per V8 unity build batch")
 
 if(MSVC)
   enable_language(ASM_MASM)
@@ -16,7 +18,7 @@ if(MSVC)
 
 endif()
 
-add_definitions("-DV8_ENABLE_WEBASSEMBLY -DV8_ADVANCED_BIGINT_ALGORITHMS -DV8_ENABLE_WASM_SIMD256_REVEC -DV8_ENABLE_TURBOFAN")
+add_definitions("-DV8_ENABLE_WEBASSEMBLY -DV8_ADVANCED_BIGINT_ALGORITHMS -DV8_ENABLE_WASM_SIMD256_REVEC -DV8_ENABLE_TURBOFAN -DV8_ENABLE_SPARKPLUG")
 if(WIN32)
   add_definitions("-DNOMINMAX -DV8_ENABLE_SYSTEM_INSTRUMENTATION")
   # todo: for zlib, need to extract zlib when refactor
@@ -512,6 +514,7 @@ target_link_libraries(
     v8_libbase
     v8_libsampler
     v8_torque_generated
+    v8_highway
     absl::int128
   PUBLIC
     v8-bytecodes-builtin-list
@@ -839,6 +842,26 @@ target_link_libraries(v8_libsampler PRIVATE v8_libbase)
 
 add_subdirectory(v8/third_party/abseil-cpp EXCLUDE_FROM_ALL)
 
+add_library(v8_highway STATIC
+  v8/third_party/highway/src/hwy/abort.cc
+  v8/third_party/highway/src/hwy/aligned_allocator.cc
+  v8/third_party/highway/src/hwy/per_target.cc
+  v8/third_party/highway/src/hwy/print.cc
+  v8/third_party/highway/src/hwy/stats.cc
+  v8/third_party/highway/src/hwy/targets.cc
+  v8/third_party/highway/src/hwy/timer.cc
+)
+target_include_directories(v8_highway PUBLIC ${PROJECT_SOURCE_DIR}/v8/third_party/highway/src)
+target_compile_definitions(v8_highway PUBLIC
+  $<${is-ia32}:HWY_BROKEN_TARGETS=\(HWY_AVX2|HWY_AVX3\)>
+  $<${is-arm64}:HWY_BROKEN_TARGETS=HWY_ALL_SVE>
+  $<$<OR:${is-ppc64},${is-s390}>:TOOLCHAIN_MISS_ASM_HWCAP_H>
+  $<$<OR:${is-s390},${is-aix}>:HWY_BROKEN_EMU128=0>
+)
+if(enable-fPIC)
+  target_compile_options(v8_highway PRIVATE ${enable-fpic})
+endif()
+
 add_library(v8_simdutf STATIC v8/third_party/simdutf/simdutf.cpp)
 target_include_directories(v8_simdutf PUBLIC ${PROJECT_SOURCE_DIR}/v8)
 
@@ -1064,8 +1087,8 @@ target_include_directories(v8_torque_generated
 # The torque-outputs and torque_outputs variables can have too many characters
 # on Windows to be executed on the command line, so we have to write it to a
 # temporary file and execute that 
-file(WRITE "${PROJECT_BINARY_DIR}/touch_torque_outputs.cmake"
-           "file(TOUCH ${torque-outputs};${torque_outputs})")
+file(GENERATE OUTPUT "${PROJECT_BINARY_DIR}/touch_torque_outputs.cmake"
+  CONTENT "file(TOUCH ${torque-outputs};${torque_outputs})")
 
 add_custom_command(
   COMMAND
@@ -1169,4 +1192,69 @@ add_library(v8-adler32 OBJECT v8/third_party/zlib/adler32.c)
 target_include_directories(v8-adler32
   PUBLIC
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/v8/third_party/zlib>
+)
+
+set_target_properties(
+  v8_base_without_compiler
+  v8_compiler
+  v8_initializers
+  v8_inspector
+  PROPERTIES
+    UNITY_BUILD ${V8CMAKE_UNITY_BUILD}
+    UNITY_BUILD_MODE BATCH
+    UNITY_BUILD_BATCH_SIZE ${V8CMAKE_UNITY_BUILD_BATCH_SIZE}
+)
+
+set_source_files_properties(
+  v8/src/ast/ast.cc
+  v8/src/ast/prettyprinter.cc
+  v8/src/codegen/code-stub-assembler.cc
+  v8/src/compiler/graph-visualizer.cc
+  v8/src/compiler/turbofan-enabled.cc
+  v8/src/deoptimizer/deoptimizer-cfi-empty.cc
+  v8/src/diagnostics/unwinding-info-win64.cc
+  v8/src/heap/cppgc/marker.cc
+  v8/src/heap/cppgc/sweeper.cc
+  v8/src/heap/scavenger.cc
+  v8/src/heap/traced-handles-marking-visitor.cc
+  v8/src/inspector/v8-string-conversions.cc
+  v8/src/objects/js-temporal-objects.cc
+  v8/src/regexp/experimental/experimental-compiler.cc
+  v8/src/runtime/runtime-strings.cc
+  v8/src/runtime/runtime-test.cc
+  v8/src/runtime/runtime-wasm.cc
+
+  v8/src/snapshot/embedded/platform-embedded-file-writer-aix.cc
+  v8/src/snapshot/embedded/platform-embedded-file-writer-linux.cc
+  v8/src/snapshot/embedded/platform-embedded-file-writer-generic.cc
+  v8/src/snapshot/embedded/platform-embedded-file-writer-mac.cc
+  v8/src/snapshot/embedded/platform-embedded-file-writer-win.cc
+
+  v8/src/torque/csa-generator.cc
+  v8/src/trap-handler/handler-inside-win.cc
+  v8/src/trap-handler/handler-outside-win.cc
+  v8/src/wasm/c-api.cc
+  v8/src/wasm/wasm-external-refs.cc
+
+  v8/third_party/zlib/adler32.c
+  v8/third_party/zlib/adler32_simd.c
+  v8/third_party/zlib/compress.c
+  v8/third_party/zlib/cpu_features.c
+  v8/third_party/zlib/crc32.c
+  v8/third_party/zlib/crc32_simd.c
+  v8/third_party/zlib/crc_folding.c
+  v8/third_party/zlib/deflate.c
+  v8/third_party/zlib/gzclose.c
+  v8/third_party/zlib/gzlib.c
+  v8/third_party/zlib/gzread.c
+  v8/third_party/zlib/gzwrite.c
+  v8/third_party/zlib/infback.c
+  v8/third_party/zlib/inffast.c
+  v8/third_party/zlib/inflate.c
+  v8/third_party/zlib/inftrees.c
+  v8/third_party/zlib/trees.c
+  v8/third_party/zlib/uncompr.c
+  v8/third_party/zlib/zutil.c
+
+  PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
 )
