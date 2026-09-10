@@ -113,19 +113,13 @@ set(
   $<${is-win}:V8_OS_WIN32>
 )
 
-set(disable-exceptions
-  $<$<CXX_COMPILER_ID:MSVC>:/EHs-c->
-  $<$<CXX_COMPILER_ID:AppleClang>:-fno-exceptions>
-  $<$<CXX_COMPILER_ID:Clang>:-fno-exceptions>
-  $<$<CXX_COMPILER_ID:GNU>:-fno-exceptions>
-)
-
-set(enable-exceptions
-  $<$<CXX_COMPILER_ID:MSVC>:/EHsc>
-  $<$<CXX_COMPILER_ID:AppleClang>:-fexceptions>
-  $<$<CXX_COMPILER_ID:Clang>:-fexceptions>
-  $<$<CXX_COMPILER_ID:GNU>:-fexceptions>
-)
+if(MSVC OR CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+  set(disable-exceptions /EHs-c-)
+  set(enable-exceptions /EHsc)
+else()
+  set(disable-exceptions -fno-exceptions)
+  set(enable-exceptions -fexceptions)
+endif()
 
 set(enable-fpic
   $<$<CXX_COMPILER_ID:AppleClang>:-fPIC>
@@ -832,6 +826,8 @@ target_link_libraries(v8_libsampler PRIVATE v8_libbase)
 # v8_libbase
 #
 
+add_subdirectory(v8/third_party/abseil-cpp EXCLUDE_FROM_ALL)
+
 add_library(v8_libbase STATIC
   v8/src/base/abort-mode.cc
   v8/src/base/bits.cc
@@ -887,7 +883,11 @@ if(enable-fPIC)
   target_compile_options(v8_libbase PRIVATE ${enable-fpic})
 endif()
 target_include_directories(v8_libbase PRIVATE ${PROJECT_SOURCE_DIR}/v8)
+target_include_directories(v8_libbase PRIVATE ${PROJECT_SOURCE_DIR}/v8/third_party/llvm-libc/src)
+target_compile_definitions(v8_libbase PRIVATE LIBC_NAMESPACE=__llvm_libc_cr)
 target_link_libraries(v8_libbase
+  PUBLIC
+    absl::synchronization
   PRIVATE
     Threads::Threads
     $<${is-linux}:${CMAKE_DL_LIBS}>
