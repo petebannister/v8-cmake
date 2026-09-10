@@ -16,7 +16,7 @@ if(MSVC)
 
 endif()
 
-add_definitions("-DV8_ENABLE_WEBASSEMBLY -DV8_ADVANCED_BIGINT_ALGORITHMS -DV8_ENABLE_WASM_SIMD256_REVEC")
+add_definitions("-DV8_ENABLE_WEBASSEMBLY -DV8_ADVANCED_BIGINT_ALGORITHMS -DV8_ENABLE_WASM_SIMD256_REVEC -DV8_ENABLE_TURBOFAN")
 if(WIN32)
   add_definitions("-DNOMINMAX -DV8_ENABLE_SYSTEM_INSTRUMENTATION")
   # todo: for zlib, need to extract zlib when refactor
@@ -41,8 +41,13 @@ include(GenerateBuiltinsList)
 check_python_module_exists(PYTHON_HAVE_MARKUPSAFE markupsafe)
 
 if (NOT CMAKE_CXX_STANDARD)
-  set(CMAKE_CXX_STANDARD 17)
+  set(CMAKE_CXX_STANDARD 20)
 endif()
+if (CMAKE_CXX_STANDARD LESS 20)
+  message(FATAL_ERROR "V8 15 requires C++20 or later")
+endif()
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+add_compile_options($<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/Zc:__cplusplus>)
 
 if (NOT CMAKE_C_STANDARD)
   set(CMAKE_C_STANDARD 90)
@@ -142,6 +147,8 @@ add_executable(
   v8/src/d8/d8-test.cc
   v8/src/d8/d8-platforms.cc
   v8/src/d8/d8.cc
+  v8/src/d8/hardware-watchpoints.cc
+  v8/src/d8/memory-access-information.cc
 )
 
 target_compile_definitions(d8 PRIVATE $<${is-msvc}:_HAS_EXCEPTIONS=0>)
@@ -266,6 +273,7 @@ file(GLOB parsing-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/sr
 file(GLOB profiler-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/profiler/*.cc)
 file(GLOB regexp-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/regexp/*.cc v8/src/regexp/experimental/*.cc)
 file(GLOB runtime-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/runtime/*.cc)
+file(GLOB sandbox-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/sandbox/*.cc)
 file(GLOB snapshot-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/snapshot/*.cc)
 file(GLOB strings-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/strings/*.cc)
 file(GLOB utils-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/utils/*.cc)
@@ -279,6 +287,7 @@ file(GLOB heap-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS
   v8/src/heap/base/*.cc
   v8/src/heap/cppgc-js/*.cc
   v8/src/heap/cppgc/*.cc
+  v8/src/heap/cppgc-internal/*.cc
   v8/src/heap/third-party/*.cc
 )
 
@@ -287,6 +296,8 @@ list(REMOVE_ITEM heap-sources
   v8/src/heap/conservative-stack-visitor.cc
   v8/src/heap/cppgc/caged-heap-local-data.cc
   v8/src/heap/cppgc/caged-heap.cc
+  v8/src/heap/cppgc-internal/caged-heap-local-data.cc
+  v8/src/heap/cppgc-internal/caged-heap.cc
 )
 
 if(WIN32)
@@ -321,6 +332,7 @@ list(REMOVE_ITEM diagnostic-sources v8/src/diagnostics/etw-jit-win.cc)
 list(REMOVE_ITEM object-sources ${i18n-sources})
 list(REMOVE_ITEM regexp-sources v8/src/regexp/gen-regexp-special-case.cc)
 list(REMOVE_ITEM runtime-sources v8/src/runtime/runtime-intl.cc)
+list(FILTER sandbox-sources EXCLUDE REGEX "/generated-code-validator.*[.]cc$")
 list(REMOVE_ITEM snapshot-sources
   v8/src/snapshot/mksnapshot.cc
   v8/src/snapshot/snapshot-empty.cc
@@ -348,9 +360,11 @@ add_library(v8_base_without_compiler STATIC
   $<${is-x64}:v8/src/deoptimizer/x64/deoptimizer-x64.cc>
   $<${is-x64}:v8/src/diagnostics/x64/disasm-x64.cc>
   $<${is-x64}:v8/src/diagnostics/x64/eh-frame-x64.cc>
+  $<${is-x64}:v8/src/diagnostics/x64/unwinder-x64.cc>
   $<${is-x64}:v8/src/execution/x64/frame-constants-x64.cc>
   $<${is-x64}:v8/src/regexp/x64/regexp-macro-assembler-x64.cc>
   $<${is-arm64}:v8/src/codegen/arm64/assembler-arm64.cc>
+  $<${is-arm64}:v8/src/codegen/arm64/constant-pool-arm64.cc>
   $<${is-arm64}:v8/src/codegen/arm64/cpu-arm64.cc>
   $<${is-arm64}:v8/src/codegen/arm64/decoder-arm64.cc>
   $<${is-arm64}:v8/src/codegen/arm64/macro-assembler-arm64.cc>
@@ -365,7 +379,11 @@ add_library(v8_base_without_compiler STATIC
   $<${is-arm64}:v8/src/deoptimizer/arm64/deoptimizer-arm64.cc>
   $<${is-arm64}:v8/src/diagnostics/arm64/disasm-arm64.cc>
   $<${is-arm64}:v8/src/diagnostics/arm64/eh-frame-arm64.cc>
+  $<${is-arm64}:v8/src/diagnostics/arm64/unwinder-arm64.cc>
   $<${is-arm64}:v8/src/execution/arm64/frame-constants-arm64.cc>
+  $<${is-arm64}:v8/src/execution/arm64/pointer-auth-arm64.cc>
+  $<${is-arm64}:v8/src/execution/arm64/simulator-arm64.cc>
+  $<${is-arm64}:v8/src/execution/arm64/simulator-logic-arm64.cc>
   $<${is-arm64}:v8/src/regexp/arm64/regexp-macro-assembler-arm64.cc>
   $<$<AND:${is-ppc},${is-ppc64}>:v8/src/codegen/ppc/assembler-ppc.cc>
   $<$<AND:${is-ppc},${is-ppc64}>:v8/src/codegen/ppc/constants-ppc.cc>
@@ -392,6 +410,8 @@ add_library(v8_base_without_compiler STATIC
   ${codegen-sources}
   v8/src/common/assert-scope.cc
   v8/src/common/code-memory-access.cc
+  v8/src/common/ptr-compr.cc
+  v8/src/common/synchronization-point-support.cc
   v8/src/compiler-dispatcher/lazy-compile-dispatcher.cc
   v8/src/compiler-dispatcher/optimizing-compile-dispatcher.cc
   v8/src/date/date.cc
@@ -402,6 +422,7 @@ add_library(v8_base_without_compiler STATIC
   ${execution-sources}
   ${extensions-sources}
   v8/src/flags/flags.cc
+  v8/src/flags/save-flags.cc
   v8/src/handles/global-handles.cc
   v8/src/handles/handles.cc
   ${heap-sources}
@@ -412,6 +433,7 @@ add_library(v8_base_without_compiler STATIC
   v8/src/ic/stub-cache.cc
   v8/src/init/bootstrapper.cc
   v8/src/init/icu_util.cc
+  v8/src/init/isolate-group.cc
   v8/src/init/startup-data-util.cc
   v8/src/init/v8.cc
   ${handles-sources}
@@ -425,6 +447,7 @@ add_library(v8_base_without_compiler STATIC
   ${regexp-sources}
   v8/src/roots/roots.cc
   ${runtime-sources}
+  ${sandbox-sources}
   v8/src/base/sanitizer/lsan-page-allocator.cc
   ${snapshot-sources}
   ${strings-sources}
@@ -441,6 +464,7 @@ add_library(v8_base_without_compiler STATIC
   ${wasm-sources}
   ${zone-sources}
   ${zlib-sources}
+  v8/third_party/siphash/halfsiphash.cc
   $<TARGET_OBJECTS:v8-adler32>
 )
 
@@ -498,6 +522,7 @@ file(GLOB_RECURSE compiler-sources
   CONFIGURE_DEPENDS v8/src/compiler/*.cc
 )
 list(FILTER compiler-sources EXCLUDE REGEX ".*backend/.*/.*[.]cc$")
+list(REMOVE_ITEM compiler-sources v8/src/compiler/turbofan-disabled.cc)
 
 add_library(v8_compiler STATIC)
 target_sources(v8_compiler PRIVATE ${compiler-sources})
@@ -808,11 +833,20 @@ target_link_libraries(v8_libsampler PRIVATE v8_libbase)
 #
 
 add_library(v8_libbase STATIC
+  v8/src/base/abort-mode.cc
   v8/src/base/bits.cc
   v8/src/base/bounded-page-allocator.cc
+  v8/src/base/cpu/cpu.cc
+  $<$<OR:${is-ia32},${is-x64}>:v8/src/base/cpu/cpu-x86.cc>
+  $<$<OR:${is-arm},${is-arm64}>:v8/src/base/cpu/cpu-arm.cc>
+  $<${is-mips64}:v8/src/base/cpu/cpu-mips64.cc>
+  $<$<OR:${is-ppc},${is-ppc64}>:v8/src/base/cpu/cpu-ppc.cc>
+  $<${is-s390}:v8/src/base/cpu/cpu-s390.cc>
   v8/src/base/debug/stack_trace.cc
   v8/src/base/division-by-constant.cc
+  v8/src/base/emulated-virtual-address-subspace.cc
   v8/src/base/file-utils.cc
+  v8/src/base/fpu.cc
   v8/src/base/ieee754.cc
   v8/src/base/logging.cc
   v8/src/base/once.cc
@@ -824,11 +858,13 @@ add_library(v8_libbase STATIC
   v8/src/base/platform/semaphore.cc
   v8/src/base/platform/time.cc
   v8/src/base/region-allocator.cc
+  v8/src/base/sanitizer/lsan-virtual-address-space.cc
   v8/src/base/sys-info.cc
   v8/src/base/strings.cc
   v8/src/base/utils/random-number-generator.cc
   v8/src/base/vlq-base64.cc
   v8/src/base/virtual-address-space.cc
+  v8/src/base/virtual-address-space-page-allocator.cc
   $<$<NOT:$<OR:${is-win},${is-aix}>>:v8/src/base/platform/platform-posix-time.cc>
   $<${is-win}:v8/src/base/platform/platform-win32.cc>
   $<${is-win}:v8/src/base/debug/stack_trace_win.cc>
