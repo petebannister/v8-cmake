@@ -49,7 +49,9 @@ if (CMAKE_CXX_STANDARD LESS 20)
 endif()
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_compile_options($<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/Zc:__cplusplus>)
-
+add_compile_options(
+  $<$<COMPILE_LANG_AND_ID:CXX,Clang,AppleClang,GNU>:-Wno-invalid-offsetof>
+)
 if (NOT CMAKE_C_STANDARD)
   set(CMAKE_C_STANDARD 90)
 endif()
@@ -237,7 +239,7 @@ list(APPEND i18n-sources
 target_sources(v8-i18n-support PRIVATE ${i18n-sources})
 target_compile_definitions(v8-i18n-support PRIVATE $<${is-msvc}:_HAS_EXCEPTIONS=0>)
 target_compile_options(v8-i18n-support PRIVATE ${disable-exceptions})
-target_link_libraries(v8-i18n-support PRIVATE v8_torque_generated)
+target_link_libraries(v8-i18n-support PRIVATE v8_torque_generated absl::int128)
 
 target_include_directories(v8-i18n-support
   PRIVATE
@@ -317,6 +319,7 @@ endif()
 list(REMOVE_ITEM builtin-sources
   v8/src/builtins/builtins-intl-gen.cc
   v8/src/builtins/builtins-intl.cc
+  v8/src/builtins/builtins-temporal.cc
 )
 
 if (NOT WIN32)
@@ -324,7 +327,11 @@ if (NOT WIN32)
 endif()
 list(REMOVE_ITEM diagnostic-sources v8/src/diagnostics/etw-jit-win.cc)
 
-list(REMOVE_ITEM object-sources ${i18n-sources})
+list(REMOVE_ITEM object-sources
+  ${i18n-sources}
+  v8/src/objects/js-temporal-objects.cc
+  v8/src/objects/js-temporal-zoneinfo64.cc
+)
 list(REMOVE_ITEM regexp-sources v8/src/regexp/gen-regexp-special-case.cc)
 list(REMOVE_ITEM runtime-sources v8/src/runtime/runtime-intl.cc)
 list(FILTER sandbox-sources EXCLUDE REGEX "/generated-code-validator.*[.]cc$")
@@ -505,6 +512,7 @@ target_link_libraries(
     v8_libbase
     v8_libsampler
     v8_torque_generated
+    absl::int128
   PUBLIC
     v8-bytecodes-builtin-list
 )
@@ -541,6 +549,7 @@ target_link_libraries(v8_compiler
     v8_libbase
     v8_base_without_compiler
     v8_torque_generated
+    absl::int128
   PUBLIC
     v8-bytecodes-builtin-list
 )
@@ -613,7 +622,7 @@ target_include_directories(v8_initializers
     ${PROJECT_BINARY_DIR}
 )
 
-target_link_libraries(v8_initializers PRIVATE v8_torque_generated v8-bytecodes-builtin-list)
+target_link_libraries(v8_initializers PRIVATE v8_torque_generated v8-bytecodes-builtin-list absl::int128)
 
 #
 # v8_snapshot
@@ -638,6 +647,7 @@ target_include_directories(v8_snapshot PRIVATE ${PROJECT_SOURCE_DIR}/v8)
 target_link_libraries(v8_snapshot
   PRIVATE
     v8_torque_generated
+    absl::int128
     v8-bytecodes-builtin-list
 )
 
@@ -731,7 +741,7 @@ target_include_directories(v8_inspector
     ${PROJECT_SOURCE_DIR}/v8/third_party/googletest/src/googletest/include
 )
 
-target_link_libraries(v8_inspector PRIVATE v8_torque_generated)
+target_link_libraries(v8_inspector PRIVATE v8_torque_generated absl::int128)
 
 file(GLOB inspector-templates
   RELATIVE ${PROJECT_SOURCE_DIR}
@@ -1152,6 +1162,7 @@ target_link_libraries(mksnapshot
     v8_initializers
     v8-bytecodes-builtin-list
     v8_torque_generated
+    absl::int128
 )
 
 add_library(v8-adler32 OBJECT v8/third_party/zlib/adler32.c)
