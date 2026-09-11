@@ -1,0 +1,15 @@
+Subject: [PATCH] Qualify JSON parser Float64 to avoid TurboFan ambiguity
+---
+diff --git a/v8/src/json/json-parser.cc b/v8/src/json/json-parser.cc
+--- a/v8/src/json/json-parser.cc
++++ b/v8/src/json/json-parser.cc
+@@ -886,7 +886,7 @@
+           if (IsSmi(value)) {
+             value = hn_allocator.AllocateNext(
+-                roots, Float64::FromMaybeNaN(Smi::ToInt(value)));
++                roots, internal::Float64::FromMaybeNaN(Smi::ToInt(value)));
+           } else if constexpr (should_track_json_source) {
+             value = hn_allocator.AllocateNext(
+-                roots, Float64::FromMaybeNaN(Object::NumberValue(value)));
++                roots, internal::Float64::FromMaybeNaN(Object::NumberValue(value)));
+           }

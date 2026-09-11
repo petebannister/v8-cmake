@@ -322,27 +322,48 @@ list(REMOVE_ITEM builtin-sources
   v8/src/builtins/builtins-intl-gen.cc
   v8/src/builtins/builtins-intl.cc
   v8/src/builtins/builtins-temporal.cc
+  v8/src/builtins/generate-bytecodes-builtins-list.cc
 )
 
 if (NOT WIN32)
   list(REMOVE_ITEM diagnostic-sources v8/src/diagnostics/unwinding-info-win64.cc)
 endif()
-list(REMOVE_ITEM diagnostic-sources v8/src/diagnostics/etw-jit-win.cc)
+list(REMOVE_ITEM diagnostic-sources
+  v8/src/diagnostics/etw-debug-win.cc
+  v8/src/diagnostics/etw-isolate-capture-state-monitor-win.cc
+  v8/src/diagnostics/etw-isolate-load-script-data-win.cc
+  v8/src/diagnostics/etw-isolate-operations-win.cc
+  v8/src/diagnostics/etw-jit-metadata-win.cc
+  v8/src/diagnostics/etw-jit-win.cc
+)
+list(REMOVE_ITEM heap-sources v8/src/heap/reference-summarizer.cc)
 
 list(REMOVE_ITEM object-sources
   ${i18n-sources}
   v8/src/objects/js-temporal-objects.cc
   v8/src/objects/js-temporal-zoneinfo64.cc
 )
-list(REMOVE_ITEM regexp-sources v8/src/regexp/gen-regexp-special-case.cc)
+list(REMOVE_ITEM regexp-sources
+  v8/src/regexp/gen-regexp-special-case.cc
+  v8/src/regexp/regexp-ast-printer.cc
+  v8/src/regexp/regexp-dotprinter.cc
+  v8/src/regexp/regexp-graph-printer.cc
+  v8/src/regexp/regexp-macro-assembler-tracer.cc
+  v8/src/regexp/regexp-node-printer.cc
+  v8/src/regexp/regexp-printer.cc
+)
 list(REMOVE_ITEM runtime-sources v8/src/runtime/runtime-intl.cc)
 list(FILTER sandbox-sources EXCLUDE REGEX "/generated-code-validator.*[.]cc$")
 list(REMOVE_ITEM snapshot-sources
+  v8/src/snapshot/builtins-effects-dummy.cc
   v8/src/snapshot/mksnapshot.cc
+  v8/src/snapshot/snapshot-compression.cc
   v8/src/snapshot/snapshot-empty.cc
   v8/src/snapshot/snapshot-external.cc
+  v8/src/snapshot/static-roots-gen.cc
 )
 list(REMOVE_ITEM strings-sources v8/src/strings/char-predicates.cc)
+list(REMOVE_ITEM utils-sources v8/src/utils/v8dll-main.cc)
 
 list(APPEND snapshot-sources v8/src/snapshot/embedded/embedded-data.cc)
 list(APPEND wasm-sources ${wasm-baseline-sources})
@@ -495,6 +516,24 @@ set_property(SOURCE v8/src/diagnostics/unwinding-info-win64.cc
 
 target_compile_definitions(v8_base_without_compiler PRIVATE ${v8_defines} $<${is-msvc}:_HAS_EXCEPTIONS=0>)
 target_compile_options(v8_base_without_compiler PRIVATE ${disable-exceptions})
+target_precompile_headers(v8_base_without_compiler
+  PRIVATE
+    "$<$<COMPILE_LANGUAGE:CXX>:<algorithm$<ANGLE-R>>"
+    "$<$<COMPILE_LANGUAGE:CXX>:<atomic$<ANGLE-R>>"
+    "$<$<COMPILE_LANGUAGE:CXX>:<functional$<ANGLE-R>>"
+    "$<$<COMPILE_LANGUAGE:CXX>:<limits$<ANGLE-R>>"
+    "$<$<COMPILE_LANGUAGE:CXX>:<memory$<ANGLE-R>>"
+    "$<$<COMPILE_LANGUAGE:CXX>:<optional$<ANGLE-R>>"
+    "$<$<COMPILE_LANGUAGE:CXX>:<string$<ANGLE-R>>"
+    "$<$<COMPILE_LANGUAGE:CXX>:<string_view$<ANGLE-R>>"
+    "$<$<COMPILE_LANGUAGE:CXX>:<type_traits$<ANGLE-R>>"
+    "$<$<COMPILE_LANGUAGE:CXX>:<unordered_map$<ANGLE-R>>"
+    "$<$<COMPILE_LANGUAGE:CXX>:<unordered_set$<ANGLE-R>>"
+    "$<$<COMPILE_LANGUAGE:CXX>:<utility$<ANGLE-R>>"
+    "$<$<COMPILE_LANGUAGE:CXX>:<vector$<ANGLE-R>>"
+    "$<$<COMPILE_LANGUAGE:CXX>:<absl/container/flat_hash_map.h$<ANGLE-R>>"
+    "$<$<COMPILE_LANGUAGE:CXX>:<absl/container/flat_hash_set.h$<ANGLE-R>>"
+)
 if(enable-fPIC)
   target_compile_options(v8_base_without_compiler PRIVATE ${enable-fpic})
 endif()
@@ -612,6 +651,11 @@ add_library(
   v8/src/interpreter/interpreter-generator.cc
   v8/src/interpreter/interpreter-intrinsics-generator.cc
 )
+
+get_target_property(initializer-sources v8_initializers SOURCES)
+get_target_property(base-sources v8_base_without_compiler SOURCES)
+list(REMOVE_ITEM base-sources ${initializer-sources})
+set_property(TARGET v8_base_without_compiler PROPERTY SOURCES ${base-sources})
 
 target_compile_definitions(v8_initializers PRIVATE ${v8_defines} $<${is-msvc}:_HAS_EXCEPTIONS=0>)
 target_compile_options(v8_initializers PRIVATE ${disable-exceptions})
@@ -1162,6 +1206,7 @@ target_link_libraries(torque
 
 add_executable(mksnapshot
   v8/src/init/setup-isolate-full.cc
+  v8/src/snapshot/builtins-effects-dummy.cc
   v8/src/snapshot/embedded/embedded-empty.cc
   v8/src/snapshot/embedded/embedded-file-writer.cc
   v8/src/snapshot/embedded/platform-embedded-file-writer-aix.cc
@@ -1171,6 +1216,7 @@ add_executable(mksnapshot
   v8/src/snapshot/embedded/platform-embedded-file-writer-win.cc
   v8/src/snapshot/mksnapshot.cc
   v8/src/snapshot/snapshot-empty.cc
+  v8/src/snapshot/static-roots-gen.cc
 )
 
 target_compile_definitions(mksnapshot PRIVATE $<${is-msvc}:_HAS_EXCEPTIONS=0>)

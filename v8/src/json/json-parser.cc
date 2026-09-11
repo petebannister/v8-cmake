@@ -885,10 +885,10 @@ Handle<JSObject> JsonParser<Char>::BuildJsonObject(const JsonContinuation& cont,
         if (details.representation().IsDouble()) {
           if (IsSmi(value)) {
             value = hn_allocator.AllocateNext(
-                roots, Float64::FromMaybeNaN(Smi::ToInt(value)));
+                roots, internal::Float64::FromMaybeNaN(Smi::ToInt(value)));
           } else if constexpr (should_track_json_source) {
             value = hn_allocator.AllocateNext(
-                roots, Float64::FromMaybeNaN(Object::NumberValue(value)));
+                roots, internal::Float64::FromMaybeNaN(Object::NumberValue(value)));
           }
         }
         FieldIndex index = FieldIndex::ForInObjectOffset(
