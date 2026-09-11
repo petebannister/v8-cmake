@@ -7,7 +7,8 @@ It mangles absolute paths without this patch. GN apparently passes
 relative paths but that's not robust with CMake.
 ---
  v8/third_party/inspector_protocol/code_generator.py | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ v8/third_party/jinja2/tests.py                       | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/v8/third_party/inspector_protocol/code_generator.py b/v8/third_party/inspector_protocol/code_generator.py
 index 4260dbe..50e439e 100755
@@ -22,6 +23,18 @@ index 4260dbe..50e439e 100755
    except Exception:
      # Work with python 2 and 3 http://docs.python.org/py3k/howto/pyporting.html
      exc = sys.exc_info()[1]
+diff --git a/v8/third_party/jinja2/tests.py b/v8/third_party/jinja2/tests.py
+--- a/v8/third_party/jinja2/tests.py
++++ b/v8/third_party/jinja2/tests.py
+@@ -10,7 +10,7 @@
+ """
+ import operator
+ import re
+-from collections import Mapping
++from collections.abc import Mapping
+ from jinja2.runtime import Undefined
+ from jinja2._compat import text_type, string_types, integer_types
+ import decimal
 -- 
 2.20.1
 
