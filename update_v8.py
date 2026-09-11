@@ -199,7 +199,8 @@ if __name__ == '__main__':
   try:
     update_all()
   finally:
+    lockfile.close()
     try:
       os.unlink(lockfile_name)
-    except:
+    except OSError:
       pass

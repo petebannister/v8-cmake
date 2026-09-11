@@ -315,12 +315,7 @@ class Context(with_metaclass(ContextMeta)):
 
 # register the context as mapping if possible
 try:
-    try:
-        # Python 3.3+: Import from collections.abc
-        from collections.abc import Mapping
-    except ImportError:
-        # Fallback for Python <3.3: Use the deprecated alias
-        from collections import Mapping
+    from collections import Mapping
     Mapping.register(Context)
 except ImportError:
     pass

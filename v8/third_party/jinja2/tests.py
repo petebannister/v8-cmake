@@ -10,14 +10,7 @@
 """
 import operator
 import re
-
-try:
-    # Python 3.3+: Import from collections.abc
-    from collections.abc import Mapping
-except ImportError:
-    # Fallback for Python <3.3: Use the deprecated alias
-    from collections import Mapping
-    
+from collections import Mapping
 from jinja2.runtime import Undefined
 from jinja2._compat import text_type, string_types, integer_types
 import decimal
